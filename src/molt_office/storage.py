@@ -497,6 +497,7 @@ class RedisBackend(StorageBackend):
 
 def _event_fields(event: Event) -> Dict[str, Any]:
     payload = asdict(event)
+    payload["room_id"] = payload["room_id"] or ""
     payload["data"] = json.dumps(event.data)
     payload["err"] = json.dumps(event.err) if event.err else ""
     payload["ok"] = "1" if event.ok else "0"
