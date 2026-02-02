@@ -43,7 +43,7 @@ Endpoints:
 - `GET /objects/search?actor=ec&q=lemma&tags=cat:logic,desc:lemma&tag_mode=all&offset=0&limit=50`
 - `GET /objects/{object_id}/history?actor=ec&offset=0&limit=50`
 - `GET /events?last_id=0-0&block_ms=0` (Redis only)
-- `GET /events/sse?last_id=0-0` (Redis only)
+- `GET /events/sse?last_id=0-0&heartbeat=15000` (Redis only)
 
 ## Principles
 1. Shared facts, local minds

@@ -6,6 +6,7 @@ import os
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 
 from .storage import InMemoryBackend, RedisBackend, StorageBackend
@@ -200,20 +201,22 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         return {"stream": entries}
 
     @app.get("/events/sse")
-    def events_sse(last_id: str = "0-0"):
+    def events_sse(last_id: str = "0-0", heartbeat: int = 15000):
         if not isinstance(backend, RedisBackend):
             raise HTTPException(status_code=400, detail="Redis backend required for event stream")
 
         def generator():
             current = last_id
             while True:
-                entries = backend.read_events(last_id=current, block_ms=1000)
+                entries = backend.read_events(last_id=current, block_ms=heartbeat)
                 if entries:
                     for entry in entries:
                         current = entry["id"]
-                        yield f"data: {entry}\n\n"
+                        payload = jsonable_encoder(entry)
+                        yield f"id: {current}\n"
+                        yield f"data: {payload}\n\n"
                 else:
-                    yield "data: {}\n\n"
+                    yield ": keep-alive\n\n"
 
         return StreamingResponse(generator(), media_type="text/event-stream")
 
