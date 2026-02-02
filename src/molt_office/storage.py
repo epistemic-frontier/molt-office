@@ -62,6 +62,15 @@ class StorageBackend:
     def read_events(self, last_id: str, block_ms: int = 0) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
+    def redis_ping_ms(self) -> Optional[float]:
+        raise NotImplementedError
+
+    def event_lag_ms(self) -> Optional[int]:
+        raise NotImplementedError
+
+    def event_length(self) -> Optional[int]:
+        raise NotImplementedError
+
     def put_object(self, obj: NoteObject) -> None:
         raise NotImplementedError
 
@@ -193,6 +202,15 @@ class InMemoryBackend(StorageBackend):
         _ = last_id
         _ = block_ms
         return []
+
+    def redis_ping_ms(self) -> Optional[float]:
+        return None
+
+    def event_lag_ms(self) -> Optional[int]:
+        return None
+
+    def event_length(self) -> Optional[int]:
+        return None
 
     def put_object(self, obj: NoteObject) -> None:
         self.state.objects[obj.object_id] = obj
