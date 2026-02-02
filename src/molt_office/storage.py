@@ -48,6 +48,8 @@ class StorageBackend:
         limit: int = 20,
         offset: int = 0,
         by_actor: Optional[str] = None,
+        before_ts: Optional[float] = None,
+        after_ts: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
@@ -154,10 +156,16 @@ class InMemoryBackend(StorageBackend):
         limit: int = 20,
         offset: int = 0,
         by_actor: Optional[str] = None,
+        before_ts: Optional[float] = None,
+        after_ts: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         entries = self.state.boards.get(room_id, [])
         if by_actor:
             entries = [e for e in entries if e.get("actor") == by_actor]
+        if before_ts is not None:
+            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") < before_ts]
+        if after_ts is not None:
+            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") > after_ts]
         if offset < 0:
             offset = 0
         if limit < 0:
@@ -383,6 +391,8 @@ class RedisBackend(StorageBackend):
         limit: int = 20,
         offset: int = 0,
         by_actor: Optional[str] = None,
+        before_ts: Optional[float] = None,
+        after_ts: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         # Redis list is oldest -> newest. We read a window from the end and filter in-memory.
         if offset < 0:
@@ -395,6 +405,10 @@ class RedisBackend(StorageBackend):
         entries = [json.loads(item) for item in items]
         if by_actor:
             entries = [e for e in entries if e.get("actor") == by_actor]
+        if before_ts is not None:
+            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") < before_ts]
+        if after_ts is not None:
+            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") > after_ts]
         return entries
 
     def append_event(self, event: Event) -> None:

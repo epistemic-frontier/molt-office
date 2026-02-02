@@ -131,8 +131,18 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         limit: int = 20,
         offset: int = 0,
         by_actor: Optional[str] = None,
+        before_ts: Optional[float] = None,
+        after_ts: Optional[float] = None,
     ):
-        event, diag = world.board_read(actor, room_id, limit=limit, offset=offset, by_actor=by_actor)
+        event, diag = world.board_read(
+            actor,
+            room_id,
+            limit=limit,
+            offset=offset,
+            by_actor=by_actor,
+            before_ts=before_ts,
+            after_ts=after_ts,
+        )
         return _event_payload(event, diag)
 
     @app.post("/objects/create")
