@@ -1,71 +1,51 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .errors import WorldError
 from .events import Event, DiagEvent, new_action_id, now_ts
-
-
-@dataclass
-class Room:
-    room_id: str
-    kind: str
-    owner: Optional[str]
-    requires_knock: bool
-
-
-@dataclass
-class KnockRequest:
-    request_id: str
-    room_id: str
-    actor: str
-    msg: Optional[str]
-
-
-@dataclass
-class WorldState:
-    rooms: Dict[str, Room] = field(default_factory=dict)
-    presence: Dict[str, str] = field(default_factory=dict)  # actor -> room_id
-    doorbell: Dict[str, List[KnockRequest]] = field(default_factory=dict)
-    boards: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
-    consecutive_failures: Dict[str, int] = field(default_factory=dict)
+from .models import Room, KnockRequest
+from .storage import InMemoryBackend, StorageBackend
 
 
 class World:
-    def __init__(self, state: Optional[WorldState] = None) -> None:
-        self.state = state or WorldState()
-        if not self.state.rooms:
-            self._seed_rooms()
+    def __init__(self, backend: Optional[StorageBackend] = None) -> None:
+        self.backend = backend or InMemoryBackend()
+        self._seed_rooms()
 
     def _seed_rooms(self) -> None:
-        self.add_room("lobby", kind="lobby", owner=None, requires_knock=False)
-        self.add_room("meeting:public", kind="meeting", owner=None, requires_knock=False)
-        self.add_room("coffee:public", kind="coffee", owner=None, requires_knock=False)
+        self.backend.ensure_seeded()
+        for room_id, kind in (
+            ("lobby", "lobby"),
+            ("meeting:public", "meeting"),
+            ("coffee:public", "coffee"),
+        ):
+            if not self.backend.get_room(room_id):
+                self.add_room(room_id, kind=kind, owner=None, requires_knock=False)
 
     def add_room(self, room_id: str, kind: str, owner: Optional[str], requires_knock: bool) -> None:
-        self.state.rooms[room_id] = Room(
-            room_id=room_id,
-            kind=kind,
-            owner=owner,
-            requires_knock=requires_knock,
+        self.backend.put_room(
+            Room(
+                room_id=room_id,
+                kind=kind,
+                owner=owner,
+                requires_knock=requires_knock,
+            )
         )
-        self.state.boards.setdefault(room_id, [])
-        self.state.doorbell.setdefault(room_id, [])
 
     def ensure_private_office(self, actor: str) -> None:
         room_id = f"office:{actor}"
-        if room_id not in self.state.rooms:
+        if not self.backend.get_room(room_id):
             self.add_room(room_id, kind="office", owner=actor, requires_knock=True)
 
-    def _record_failure(self, actor: str) -> None:
-        self.state.consecutive_failures[actor] = self.state.consecutive_failures.get(actor, 0) + 1
+    def _record_failure(self, actor: str) -> int:
+        return self.backend.incr_failure(actor)
 
     def _record_success(self, actor: str) -> None:
-        self.state.consecutive_failures[actor] = 0
+        self.backend.reset_failure(actor)
 
     def _maybe_hint(self, actor: str, err_code: str) -> Optional[str]:
-        if self.state.consecutive_failures.get(actor, 0) <= 3:
+        if self.backend.get_failures(actor) <= 3:
             return None
         if err_code == "E_NEED_KNOCK":
             return "Private room. Use room.knock then wait for room.admit."
@@ -107,109 +87,118 @@ class World:
                     "owner": r.owner,
                     "requires_knock": r.requires_knock,
                 }
-                for r in self.state.rooms.values()
+                for r in self.backend.list_rooms()
             ]
         }
         self._record_success(actor)
-        return self._emit_event(actor, "room.list", None, True, data, None), None
+        event = self._emit_event(actor, "room.list", None, True, data, None)
+        self.backend.append_event(event)
+        return event, None
 
     def room_whereami(self, actor: str) -> tuple[Event, Optional[DiagEvent]]:
-        room_id = self.state.presence.get(actor)
+        room_id = self.backend.get_presence(actor)
+        room = self.backend.get_room(room_id) if room_id else None
         data = {
             "room_id": room_id,
-            "room_kind": self.state.rooms[room_id].kind if room_id else None,
+            "room_kind": room.kind if room else None,
         }
         self._record_success(actor)
-        return self._emit_event(actor, "room.whereami", room_id, True, data, None), None
+        event = self._emit_event(actor, "room.whereami", room_id, True, data, None)
+        self.backend.append_event(event)
+        return event, None
 
     def room_enter(self, actor: str, room_id: str) -> tuple[Event, Optional[DiagEvent]]:
-        if room_id not in self.state.rooms:
+        room = self.backend.get_room(room_id)
+        if not room:
             err = WorldError("E_BAD_ARG", "Unknown room", {"room_id": room_id})
             return self._fail(actor, "room.enter", room_id, err)
 
-        room = self.state.rooms[room_id]
         if room.requires_knock and room.owner != actor:
             err = WorldError("E_NEED_KNOCK", "Private room requires knock", {"room_id": room_id})
             return self._fail(actor, "room.enter", room_id, err)
 
-        self.state.presence[actor] = room_id
+        self.backend.set_presence(actor, room_id)
         self._record_success(actor)
-        return self._emit_event(actor, "room.enter", room_id, True, {"room_id": room_id}, None), None
+        event = self._emit_event(actor, "room.enter", room_id, True, {"room_id": room_id}, None)
+        self.backend.append_event(event)
+        return event, None
 
     def room_leave(self, actor: str) -> tuple[Event, Optional[DiagEvent]]:
-        room_id = self.state.presence.get(actor)
+        room_id = self.backend.get_presence(actor)
         if not room_id:
             err = WorldError("E_CONFLICT", "Not in a room", {})
             return self._fail(actor, "room.leave", None, err)
-        self.state.presence.pop(actor, None)
+        self.backend.set_presence(actor, None)
         self._record_success(actor)
-        return self._emit_event(actor, "room.leave", room_id, True, {"room_id": room_id}, None), None
+        event = self._emit_event(actor, "room.leave", room_id, True, {"room_id": room_id}, None)
+        self.backend.append_event(event)
+        return event, None
 
     def room_knock(self, actor: str, room_id: str, msg: Optional[str] = None) -> tuple[Event, Optional[DiagEvent]]:
-        if room_id not in self.state.rooms:
+        room = self.backend.get_room(room_id)
+        if not room:
             err = WorldError("E_BAD_ARG", "Unknown room", {"room_id": room_id})
             return self._fail(actor, "room.knock", room_id, err)
 
-        room = self.state.rooms[room_id]
         if not room.requires_knock:
             err = WorldError("E_CONFLICT", "Room does not require knock", {"room_id": room_id})
             return self._fail(actor, "room.knock", room_id, err)
 
         request = KnockRequest(request_id=new_action_id(), room_id=room_id, actor=actor, msg=msg)
-        self.state.doorbell[room_id].append(request)
+        self.backend.add_doorbell(request)
         self._record_success(actor)
-        return (
-            self._emit_event(
-                actor,
-                "room.knock",
-                room_id,
-                True,
-                {"request_id": request.request_id, "room_id": room_id, "status": "pending"},
-                None,
-            ),
+        event = self._emit_event(
+            actor,
+            "room.knock",
+            room_id,
+            True,
+            {"request_id": request.request_id, "room_id": room_id, "status": "pending"},
             None,
         )
+        self.backend.append_event(event)
+        return event, None
 
     def room_admit(self, actor: str, request_id: str) -> tuple[Event, Optional[DiagEvent]]:
-        for room_id, queue in self.state.doorbell.items():
-            for idx, req in enumerate(queue):
-                if req.request_id == request_id:
-                    room = self.state.rooms[room_id]
-                    if room.owner != actor:
-                        err = WorldError("E_FORBIDDEN", "Only owner can admit", {"room_id": room_id})
-                        return self._fail(actor, "room.admit", room_id, err)
-                    queue.pop(idx)
-                    self._record_success(actor)
-                    return (
-                        self._emit_event(
-                            actor,
-                            "room.admit",
-                            room_id,
-                            True,
-                            {"request_id": request_id, "room_id": room_id, "granted": True},
-                            None,
-                        ),
-                        None,
-                    )
+        request = self.backend.remove_doorbell(request_id)
+        if not request:
+            err = WorldError("E_BAD_ARG", "Unknown request_id", {"request_id": request_id})
+            return self._fail(actor, "room.admit", None, err)
 
-        err = WorldError("E_BAD_ARG", "Unknown request_id", {"request_id": request_id})
-        return self._fail(actor, "room.admit", None, err)
+        room = self.backend.get_room(request.room_id)
+        if not room or room.owner != actor:
+            err = WorldError("E_FORBIDDEN", "Only owner can admit", {"room_id": request.room_id})
+            return self._fail(actor, "room.admit", request.room_id, err)
+
+        self._record_success(actor)
+        event = self._emit_event(
+            actor,
+            "room.admit",
+            request.room_id,
+            True,
+            {"request_id": request_id, "room_id": request.room_id, "granted": True},
+            None,
+        )
+        self.backend.append_event(event)
+        return event, None
 
     def board_write(self, actor: str, room_id: str, message: str) -> tuple[Event, Optional[DiagEvent]]:
-        if room_id not in self.state.rooms:
+        room = self.backend.get_room(room_id)
+        if not room:
             err = WorldError("E_BAD_ARG", "Unknown room", {"room_id": room_id})
             return self._fail(actor, "board.write", room_id, err)
         entry = {"actor": actor, "message": message, "ts": now_ts()}
-        self.state.boards[room_id].append(entry)
+        self.backend.append_board(room_id, entry)
         self._record_success(actor)
-        return (
-            self._emit_event(actor, "board.write", room_id, True, {"entry": entry}, None),
-            None,
-        )
+        event = self._emit_event(actor, "board.write", room_id, True, {"entry": entry}, None)
+        self.backend.append_event(event)
+        return event, None
 
     def _fail(self, actor: str, cmd: str, room_id: Optional[str], err: WorldError) -> tuple[Event, DiagEvent]:
         self._record_failure(actor)
         hint = self._maybe_hint(actor, err.code)
         data: Dict[str, Any] = {"hint": hint} if hint else {}
         event = self._emit_event(actor, cmd, room_id, False, data, err.to_dict())
-        return event, self._diag_event(cmd, err)
+        diag = self._diag_event(cmd, err)
+        self.backend.append_event(event)
+        self.backend.append_diag(actor, diag)
+        return event, diag
