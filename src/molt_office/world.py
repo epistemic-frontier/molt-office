@@ -199,15 +199,22 @@ class World:
         room_id: str,
         limit: int = 20,
         offset: int = 0,
-        entry_actor: Optional[str] = None,
+        by_actor: Optional[str] = None,
     ) -> tuple[Event, Optional[DiagEvent]]:
         room = self.backend.get_room(room_id)
         if not room:
             err = WorldError("E_BAD_ARG", "Unknown room", {"room_id": room_id})
             return self._fail(actor, "board.read", room_id, err)
-        entries = self.backend.read_board(room_id, limit=limit, offset=offset, actor=entry_actor)
+        entries = self.backend.read_board(room_id, limit=limit, offset=offset, by_actor=by_actor)
         self._record_success(actor)
-        event = self._emit_event(actor, "board.read", room_id, True, {"entries": entries}, None)
+        event = self._emit_event(
+            actor,
+            "board.read",
+            room_id,
+            True,
+            {"entries": entries, "offset": offset, "limit": limit, "by_actor": by_actor},
+            None,
+        )
         self.backend.append_event(event)
         return event, None
 

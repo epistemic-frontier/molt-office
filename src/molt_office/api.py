@@ -6,7 +6,6 @@ import os
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-import json
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 
@@ -131,15 +130,9 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         actor: str,
         limit: int = 20,
         offset: int = 0,
-        entry_actor: Optional[str] = None,
+        by_actor: Optional[str] = None,
     ):
-        event, diag = world.board_read(
-            actor,
-            room_id,
-            limit=limit,
-            offset=offset,
-            entry_actor=entry_actor,
-        )
+        event, diag = world.board_read(actor, room_id, limit=limit, offset=offset, by_actor=by_actor)
         return _event_payload(event, diag)
 
     @app.post("/objects/create")
@@ -206,11 +199,6 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         event, diag = world.object_history(actor, object_id, offset=offset, limit=limit)
         return _event_payload(event, diag)
 
-    @app.get("/health")
-    def health():
-        redis_ok = backend.ping() if isinstance(backend, RedisBackend) else True
-        return {"ok": True, "redis": redis_ok}
-
     @app.get("/events")
     def events_stream(last_id: str = "0-0", block_ms: int = 0):
         if not isinstance(backend, RedisBackend):
@@ -231,11 +219,9 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
                     for entry in entries:
                         current = entry["id"]
                         payload = jsonable_encoder(entry)
-                        # Emit JSON string for SSE data field
                         yield f"id: {current}\n"
-                        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                        yield f"data: {payload}\n\n"
                 else:
-                    # Comment heartbeat to keep connections alive
                     yield ": keep-alive\n\n"
 
         return StreamingResponse(generator(), media_type="text/event-stream")
