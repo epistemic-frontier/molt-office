@@ -212,6 +212,7 @@ class World:
             content=content,
             holder=actor,
             tags=tags or [],
+            version=1,
         )
         self.backend.put_object(obj)
         self._record_success(actor)
@@ -240,6 +241,20 @@ class World:
         obj = self.backend.update_object_content(object_id, content)
         self._record_success(actor)
         event = self._emit_event(actor, "obj.write", None, True, {"object_id": object_id}, None)
+        self.backend.append_event(event)
+        return event, None
+
+    def object_append(self, actor: str, object_id: str, content: str) -> tuple[Event, Optional[DiagEvent]]:
+        obj = self.backend.get_object(object_id)
+        if not obj:
+            err = WorldError("E_BAD_ARG", "Unknown object", {"object_id": object_id})
+            return self._fail(actor, "obj.append", None, err)
+        if obj.holder != actor:
+            err = WorldError("E_FORBIDDEN", "Only holder can append", {"object_id": object_id})
+            return self._fail(actor, "obj.append", None, err)
+        obj = self.backend.append_object_content(object_id, content)
+        self._record_success(actor)
+        event = self._emit_event(actor, "obj.append", None, True, {"object_id": object_id}, None)
         self.backend.append_event(event)
         return event, None
 

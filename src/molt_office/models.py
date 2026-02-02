@@ -28,3 +28,4 @@ class NoteObject:
     content: str
     holder: str
     tags: List[str] = field(default_factory=list)
+    version: int = 1

@@ -33,6 +33,7 @@ Endpoints:
 - `POST /objects/create`
 - `GET /objects/{object_id}?actor=ec`
 - `POST /objects/{object_id}/write`
+- `POST /objects/{object_id}/append`
 - `POST /objects/{object_id}/tags`
 - `GET /objects?actor=ec&holder=ec`
 - `GET /objects/search?actor=ec&q=lemma&tags=cat:logic,desc:lemma`

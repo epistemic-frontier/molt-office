@@ -51,6 +51,11 @@ class ObjectWriteRequest(BaseModel):
     content: str
 
 
+class ObjectAppendRequest(BaseModel):
+    actor: str
+    content: str
+
+
 class ObjectTagsRequest(BaseModel):
     actor: str
     tags: list[str]
@@ -124,6 +129,11 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
     @app.post("/objects/{object_id}/write")
     def object_write(object_id: str, body: ObjectWriteRequest):
         event, diag = world.object_write(body.actor, object_id, body.content)
+        return _event_payload(event, diag)
+
+    @app.post("/objects/{object_id}/append")
+    def object_append(object_id: str, body: ObjectAppendRequest):
+        event, diag = world.object_append(body.actor, object_id, body.content)
         return _event_payload(event, diag)
 
     @app.post("/objects/{object_id}/tags")

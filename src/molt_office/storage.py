@@ -71,6 +71,9 @@ class StorageBackend:
     def update_object_content(self, object_id: str, content: str) -> Optional[NoteObject]:
         raise NotImplementedError
 
+    def append_object_content(self, object_id: str, content: str) -> Optional[NoteObject]:
+        raise NotImplementedError
+
     def set_object_tags(self, object_id: str, tags: List[str]) -> Optional[NoteObject]:
         raise NotImplementedError
 
@@ -154,6 +157,15 @@ class InMemoryBackend(StorageBackend):
         if not obj:
             return None
         obj.content = content
+        obj.version += 1
+        return obj
+
+    def append_object_content(self, object_id: str, content: str) -> Optional[NoteObject]:
+        obj = self.state.objects.get(object_id)
+        if not obj:
+            return None
+        obj.content += content
+        obj.version += 1
         return obj
 
     def set_object_tags(self, object_id: str, tags: List[str]) -> Optional[NoteObject]:
@@ -161,6 +173,7 @@ class InMemoryBackend(StorageBackend):
         if not obj:
             return None
         obj.tags = tags
+        obj.version += 1
         return obj
 
     def search_objects(
@@ -324,6 +337,7 @@ class RedisBackend(StorageBackend):
                 "content": obj.content,
                 "holder": obj.holder,
                 "tags": json.dumps(obj.tags),
+                "version": str(obj.version),
             },
         )
         self.client.rpush(self._k("objects"), obj.object_id)
@@ -339,6 +353,7 @@ class RedisBackend(StorageBackend):
             content=data.get("content", ""),
             holder=data["holder"],
             tags=json.loads(data.get("tags") or "[]"),
+            version=int(data.get("version") or 1),
         )
 
     def list_objects(self, holder: Optional[str] = None) -> List[NoteObject]:
@@ -358,6 +373,16 @@ class RedisBackend(StorageBackend):
         if not obj:
             return None
         obj.content = content
+        obj.version += 1
+        self.put_object(obj)
+        return obj
+
+    def append_object_content(self, object_id: str, content: str) -> Optional[NoteObject]:
+        obj = self.get_object(object_id)
+        if not obj:
+            return None
+        obj.content += content
+        obj.version += 1
         self.put_object(obj)
         return obj
 
@@ -366,6 +391,7 @@ class RedisBackend(StorageBackend):
         if not obj:
             return None
         obj.tags = tags
+        obj.version += 1
         self.put_object(obj)
         return obj
 
