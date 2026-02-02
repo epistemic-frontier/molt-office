@@ -194,6 +194,8 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         event, diag = world.object_history(actor, object_id, offset=offset, limit=limit)
         return _event_payload(event, diag)
 
+    started_at = time.time()
+
     @app.get("/health")
     def health():
         status = "ok"
@@ -214,6 +216,27 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
             "backend": backend_type,
             "redis_ok": redis_ok,
             "redis_latency_ms": redis_latency_ms,
+        }
+
+    @app.get("/metrics")
+    def metrics():
+        base = {
+            "backend": type(backend).__name__,
+            "uptime_s": int(time.time() - started_at),
+            "requests": None,
+        }
+        if not isinstance(backend, RedisBackend):
+            return {
+                **base,
+                "events": None,
+                "event_lag_ms": None,
+                "redis_ping_ms": None,
+            }
+        return {
+            **base,
+            "events": backend.event_length(),
+            "event_lag_ms": backend.event_lag_ms(),
+            "redis_ping_ms": backend.redis_ping_ms(),
         }
 
     @app.get("/events")
