@@ -65,7 +65,16 @@ class StorageBackend:
         query: Optional[str] = None,
         tags: Optional[List[str]] = None,
         holder: Optional[str] = None,
+        tag_mode: str = "all",
+        offset: int = 0,
+        limit: int = 50,
     ) -> List[NoteObject]:
+        raise NotImplementedError
+
+    def append_object_history(self, obj: NoteObject) -> None:
+        raise NotImplementedError
+
+    def get_object_history(self, object_id: str, offset: int = 0, limit: int = 50) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
     def update_object_content(self, object_id: str, content: str) -> Optional[NoteObject]:
@@ -158,6 +167,7 @@ class InMemoryBackend(StorageBackend):
             return None
         obj.content = content
         obj.version += 1
+        self.append_object_history(obj)
         return obj
 
     def append_object_content(self, object_id: str, content: str) -> Optional[NoteObject]:
@@ -166,6 +176,7 @@ class InMemoryBackend(StorageBackend):
             return None
         obj.content += content
         obj.version += 1
+        self.append_object_history(obj)
         return obj
 
     def set_object_tags(self, object_id: str, tags: List[str]) -> Optional[NoteObject]:
@@ -174,6 +185,7 @@ class InMemoryBackend(StorageBackend):
             return None
         obj.tags = tags
         obj.version += 1
+        self.append_object_history(obj)
         return obj
 
     def search_objects(
@@ -181,19 +193,45 @@ class InMemoryBackend(StorageBackend):
         query: Optional[str] = None,
         tags: Optional[List[str]] = None,
         holder: Optional[str] = None,
+        tag_mode: str = "all",
+        offset: int = 0,
+        limit: int = 50,
     ) -> List[NoteObject]:
         objects = self.list_objects(holder=holder)
         results: List[NoteObject] = []
         query_l = query.lower() if query else None
+        tag_set = set(tags or [])
         for obj in objects:
-            if tags and not set(tags).issubset(set(obj.tags)):
-                continue
+            if tag_set:
+                obj_tags = set(obj.tags)
+                if tag_mode == "any":
+                    if not (tag_set & obj_tags):
+                        continue
+                else:
+                    if not tag_set.issubset(obj_tags):
+                        continue
             if query_l:
                 hay = f"{obj.title}\n{obj.summary}\n{obj.content}".lower()
                 if query_l not in hay:
                     continue
             results.append(obj)
-        return results
+        return results[offset : offset + limit]
+
+    def append_object_history(self, obj: NoteObject) -> None:
+        self.state.object_history.setdefault(obj.object_id, []).append(
+            {
+                "version": obj.version,
+                "title": obj.title,
+                "summary": obj.summary,
+                "content": obj.content,
+                "tags": list(obj.tags),
+                "holder": obj.holder,
+            }
+        )
+
+    def get_object_history(self, object_id: str, offset: int = 0, limit: int = 50) -> List[Dict[str, Any]]:
+        history = self.state.object_history.get(object_id, [])
+        return history[offset : offset + limit]
 
     def incr_failure(self, actor: str) -> int:
         self.state.consecutive_failures[actor] = self.state.consecutive_failures.get(actor, 0) + 1
@@ -375,6 +413,7 @@ class RedisBackend(StorageBackend):
         obj.content = content
         obj.version += 1
         self.put_object(obj)
+        self.append_object_history(obj)
         return obj
 
     def append_object_content(self, object_id: str, content: str) -> Optional[NoteObject]:
@@ -384,6 +423,7 @@ class RedisBackend(StorageBackend):
         obj.content += content
         obj.version += 1
         self.put_object(obj)
+        self.append_object_history(obj)
         return obj
 
     def set_object_tags(self, object_id: str, tags: List[str]) -> Optional[NoteObject]:
@@ -393,6 +433,7 @@ class RedisBackend(StorageBackend):
         obj.tags = tags
         obj.version += 1
         self.put_object(obj)
+        self.append_object_history(obj)
         return obj
 
     def search_objects(
@@ -400,19 +441,36 @@ class RedisBackend(StorageBackend):
         query: Optional[str] = None,
         tags: Optional[List[str]] = None,
         holder: Optional[str] = None,
+        tag_mode: str = "all",
+        offset: int = 0,
+        limit: int = 50,
     ) -> List[NoteObject]:
         objects = self.list_objects(holder=holder)
         results: List[NoteObject] = []
         query_l = query.lower() if query else None
+        tag_set = set(tags or [])
         for obj in objects:
-            if tags and not set(tags).issubset(set(obj.tags)):
-                continue
+            if tag_set:
+                obj_tags = set(obj.tags)
+                if tag_mode == "any":
+                    if not (tag_set & obj_tags):
+                        continue
+                else:
+                    if not tag_set.issubset(obj_tags):
+                        continue
             if query_l:
                 hay = f"{obj.title}\n{obj.summary}\n{obj.content}".lower()
                 if query_l not in hay:
                     continue
             results.append(obj)
-        return results
+        return results[offset : offset + limit]
+
+    def append_object_history(self, obj: NoteObject) -> None:
+        self.client.rpush(self._k(f"obj:{obj.object_id}:history"), json.dumps(_history_payload(obj)))
+
+    def get_object_history(self, object_id: str, offset: int = 0, limit: int = 50) -> List[Dict[str, Any]]:
+        items = self.client.lrange(self._k(f"obj:{object_id}:history"), offset, offset + limit - 1)
+        return [json.loads(item) for item in items]
 
     def incr_failure(self, actor: str) -> int:
         return int(self.client.hincrby(self._k("failures"), actor, 1))
@@ -431,3 +489,14 @@ def _event_fields(event: Event) -> Dict[str, Any]:
     payload["err"] = json.dumps(event.err) if event.err else ""
     payload["ok"] = "1" if event.ok else "0"
     return payload
+
+
+def _history_payload(obj: NoteObject) -> Dict[str, Any]:
+    return {
+        "version": obj.version,
+        "title": obj.title,
+        "summary": obj.summary,
+        "content": obj.content,
+        "tags": list(obj.tags),
+        "holder": obj.holder,
+    }

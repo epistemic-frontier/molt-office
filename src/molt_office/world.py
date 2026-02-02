@@ -286,11 +286,35 @@ class World:
         query: Optional[str] = None,
         tags: Optional[List[str]] = None,
         holder: Optional[str] = None,
+        tag_mode: str = "all",
+        offset: int = 0,
+        limit: int = 50,
     ) -> tuple[Event, Optional[DiagEvent]]:
-        objs = self.backend.search_objects(query=query, tags=tags, holder=holder)
+        objs = self.backend.search_objects(
+            query=query,
+            tags=tags,
+            holder=holder,
+            tag_mode=tag_mode,
+            offset=offset,
+            limit=limit,
+        )
         data = {"objects": [o.__dict__ for o in objs]}
         self._record_success(actor)
         event = self._emit_event(actor, "obj.search", None, True, data, None)
+        self.backend.append_event(event)
+        return event, None
+
+    def object_history(
+        self,
+        actor: str,
+        object_id: str,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[Event, Optional[DiagEvent]]:
+        history = self.backend.get_object_history(object_id, offset=offset, limit=limit)
+        data = {"object_id": object_id, "history": history}
+        self._record_success(actor)
+        event = self._emit_event(actor, "obj.history", None, True, data, None)
         self.backend.append_event(event)
         return event, None
 

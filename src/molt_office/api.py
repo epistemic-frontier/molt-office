@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 import os
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .storage import InMemoryBackend, RedisBackend, StorageBackend
@@ -159,9 +159,30 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         return _event_payload(event, diag)
 
     @app.get("/objects/search")
-    def object_search(actor: str, q: Optional[str] = None, tags: Optional[str] = None, holder: Optional[str] = None):
+    def object_search(
+        actor: str,
+        q: Optional[str] = None,
+        tags: Optional[str] = None,
+        holder: Optional[str] = None,
+        tag_mode: str = "all",
+        offset: int = 0,
+        limit: int = 50,
+    ):
         tag_list = tags.split(",") if tags else None
-        event, diag = world.object_search(actor, query=q, tags=tag_list, holder=holder)
+        event, diag = world.object_search(
+            actor,
+            query=q,
+            tags=tag_list,
+            holder=holder,
+            tag_mode=tag_mode,
+            offset=offset,
+            limit=limit,
+        )
+        return _event_payload(event, diag)
+
+    @app.get("/objects/{object_id}/history")
+    def object_history(actor: str, object_id: str, offset: int = 0, limit: int = 50):
+        event, diag = world.object_history(actor, object_id, offset=offset, limit=limit)
         return _event_payload(event, diag)
 
     @app.get("/events")
@@ -170,5 +191,23 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="Redis backend required for event stream")
         entries = backend.read_events(last_id=last_id, block_ms=block_ms)
         return {"stream": entries}
+
+    @app.get("/events/sse")
+    def events_sse(last_id: str = "0-0"):
+        if not isinstance(backend, RedisBackend):
+            raise HTTPException(status_code=400, detail="Redis backend required for event stream")
+
+        def generator():
+            current = last_id
+            while True:
+                entries = backend.read_events(last_id=current, block_ms=1000)
+                if entries:
+                    for entry in entries:
+                        current = entry["id"]
+                        yield f"data: {entry}\n\n"
+                else:
+                    yield "data: {}\n\n"
+
+        return StreamingResponse(generator(), media_type="text/event-stream")
 
     return app

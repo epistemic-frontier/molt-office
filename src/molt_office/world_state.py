@@ -13,6 +13,7 @@ class WorldState:
     doorbell: Dict[str, List[KnockRequest]] = field(default_factory=dict)
     boards: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
     objects: Dict[str, NoteObject] = field(default_factory=dict)
+    object_history: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
     consecutive_failures: Dict[str, int] = field(default_factory=dict)
     events: List[Any] = field(default_factory=list)
     diag: List[Any] = field(default_factory=list)
