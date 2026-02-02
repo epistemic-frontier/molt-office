@@ -47,7 +47,9 @@ class StorageBackend:
         room_id: str,
         limit: int = 20,
         offset: int = 0,
-        actor: Optional[str] = None,
+        by_actor: Optional[str] = None,
+        before_ts: Optional[float] = None,
+        after_ts: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
@@ -58,9 +60,6 @@ class StorageBackend:
         raise NotImplementedError
 
     def read_events(self, last_id: str, block_ms: int = 0) -> List[Dict[str, Any]]:
-        raise NotImplementedError
-
-    def ping(self) -> bool:
         raise NotImplementedError
 
     def put_object(self, obj: NoteObject) -> None:
@@ -156,18 +155,25 @@ class InMemoryBackend(StorageBackend):
         room_id: str,
         limit: int = 20,
         offset: int = 0,
-        actor: Optional[str] = None,
+        by_actor: Optional[str] = None,
+        before_ts: Optional[float] = None,
+        after_ts: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         entries = self.state.boards.get(room_id, [])
-        if actor:
-            entries = [entry for entry in entries if entry.get("actor") == actor]
-        if limit <= 0:
-            return []
+        if by_actor:
+            entries = [e for e in entries if e.get("actor") == by_actor]
+        if before_ts is not None:
+            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") < before_ts]
+        if after_ts is not None:
+            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") > after_ts]
         if offset < 0:
             offset = 0
-        if offset == 0:
-            return entries[-limit:]
-        return entries[offset : offset + limit]
+        if limit < 0:
+            limit = 0
+        # Return newest entries with offset from the end.
+        end = len(entries) - offset
+        start = max(0, end - limit)
+        return entries[start:end]
 
     def append_event(self, event: Event) -> None:
         self.state.events.append(event)
@@ -179,9 +185,6 @@ class InMemoryBackend(StorageBackend):
         _ = last_id
         _ = block_ms
         return []
-
-    def ping(self) -> bool:
-        return True
 
     def put_object(self, obj: NoteObject) -> None:
         self.state.objects[obj.object_id] = obj
@@ -387,20 +390,25 @@ class RedisBackend(StorageBackend):
         room_id: str,
         limit: int = 20,
         offset: int = 0,
-        actor: Optional[str] = None,
+        by_actor: Optional[str] = None,
+        before_ts: Optional[float] = None,
+        after_ts: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
-        if limit <= 0:
-            return []
-        if offset == 0:
-            start = -limit
-            end = -1
-        else:
-            start = offset
-            end = offset + limit - 1
+        # Redis list is oldest -> newest. We read a window from the end and filter in-memory.
+        if offset < 0:
+            offset = 0
+        if limit < 0:
+            limit = 0
+        start = -(offset + limit) if (offset + limit) > 0 else 0
+        end = -1 if offset == 0 else -(offset) - 1
         items = self.client.lrange(self._k(f"board:{room_id}"), start, end)
         entries = [json.loads(item) for item in items]
-        if actor:
-            entries = [entry for entry in entries if entry.get("actor") == actor]
+        if by_actor:
+            entries = [e for e in entries if e.get("actor") == by_actor]
+        if before_ts is not None:
+            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") < before_ts]
+        if after_ts is not None:
+            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") > after_ts]
         return entries
 
     def append_event(self, event: Event) -> None:
@@ -418,9 +426,6 @@ class RedisBackend(StorageBackend):
             for entry_id, fields in items:
                 entries.append({"id": entry_id, "fields": fields})
         return entries
-
-    def ping(self) -> bool:
-        return bool(self.client.ping())
 
     def put_object(self, obj: NoteObject) -> None:
         self.client.hset(
