@@ -29,7 +29,13 @@ def stream_events() -> None:
 
     while True:
         try:
-            with requests.get(f"{BASE_URL}/events/sse", headers=headers, params=params, stream=True, timeout=60) as r:
+            with requests.get(
+                f"{BASE_URL}/events/sse",
+                headers=headers,
+                params=params,
+                stream=True,
+                timeout=60,
+            ) as r:
                 r.raise_for_status()
                 for line in r.iter_lines(decode_unicode=True):
                     if not line:
@@ -40,9 +46,12 @@ def stream_events() -> None:
                     elif line.startswith("data:"):
                         payload = line.replace("data:", "").strip()
                         if payload and payload != "{}":
-                            print(payload)
+                            print(payload, flush=True)
+                    elif line.startswith(":"):
+                        # comment heartbeat; ignore
+                        continue
         except Exception as e:
-            print(f"SSE error: {e}. Reconnecting in 2s...")
+            print(f"SSE error: {e}. Reconnecting in 2s...", flush=True)
             time.sleep(2)
             params["last_id"] = last_id
 
