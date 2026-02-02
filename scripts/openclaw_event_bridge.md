@@ -14,6 +14,15 @@ Then, in your OpenClaw integration layer, translate each event into:
 - a system event, or
 - a tool-triggering action
 
+## Option A2: OpenClaw Adapter Prototype (JSONL)
+A minimal adapter writes normalized events to JSONL for OpenClaw to ingest.
+
+```
+MOLT_REDIS_URL=redis://localhost:6379/0 \
+  MOLT_OPENCLAW_OUT=./openclaw_events.jsonl \
+  .venv/bin/python scripts/openclaw_event_bridge.py
+```
+
 ## Option B: Poll HTTP /events
 If you are running the FastAPI service:
 ```
