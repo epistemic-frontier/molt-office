@@ -20,8 +20,11 @@ Set `MOLT_REDIS_URL=redis://localhost:6379/0` for integration tests.
 Run a minimal HTTP API server:
 ```
 MOLT_REDIS_URL=redis://localhost:6379/0 \
+MOLT_OFFICE_TOKEN=<token> \
   .venv/bin/uvicorn molt_office.api:create_app --factory --reload
 ```
+All endpoints require `Authorization: Bearer <token>` if `MOLT_OFFICE_TOKEN` is set.
+
 Endpoints:
 - `GET /rooms?actor=ec`
 - `POST /rooms/{room_id}/enter`

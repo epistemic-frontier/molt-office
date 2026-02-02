@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from typing import Any, Dict, Optional
+import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .storage import InMemoryBackend, RedisBackend, StorageBackend
@@ -73,6 +75,16 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
     world = World(backend=backend)
 
     app = FastAPI(title="molt-office", version="0.0.1")
+
+    token = os.getenv("MOLT_OFFICE_TOKEN")
+
+    @app.middleware("http")
+    async def auth_middleware(request: Request, call_next):
+        if token:
+            auth = request.headers.get("authorization", "")
+            if auth != f"Bearer {token}":
+                return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+        return await call_next(request)
 
     @app.get("/rooms")
     def room_list(actor: str):
