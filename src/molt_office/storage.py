@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import json
-import time
 from typing import Any, Dict, List, Optional
 
 import redis
@@ -164,9 +163,17 @@ class InMemoryBackend(StorageBackend):
         if by_actor:
             entries = [e for e in entries if e.get("actor") == by_actor]
         if before_ts is not None:
-            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") < before_ts]
+            entries = [
+                e
+                for e in entries
+                if isinstance((ts := e.get("ts")), (int, float)) and float(ts) < before_ts
+            ]
         if after_ts is not None:
-            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") > after_ts]
+            entries = [
+                e
+                for e in entries
+                if isinstance((ts := e.get("ts")), (int, float)) and float(ts) > after_ts
+            ]
         if offset < 0:
             offset = 0
         if limit < 0:
@@ -283,7 +290,7 @@ class InMemoryBackend(StorageBackend):
 
 class RedisBackend(StorageBackend):
     def __init__(self, url: str = "redis://localhost:6379/0", prefix: str = "molt") -> None:
-        self.client = redis.Redis.from_url(url, decode_responses=True)
+        self.client: Any = redis.Redis.from_url(url, decode_responses=True)
         self.prefix = prefix
 
     def _k(self, suffix: str) -> str:
@@ -407,9 +414,17 @@ class RedisBackend(StorageBackend):
         if by_actor:
             entries = [e for e in entries if e.get("actor") == by_actor]
         if before_ts is not None:
-            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") < before_ts]
+            entries = [
+                e
+                for e in entries
+                if isinstance((ts := e.get("ts")), (int, float)) and float(ts) < before_ts
+            ]
         if after_ts is not None:
-            entries = [e for e in entries if e.get("ts") is not None and e.get("ts") > after_ts]
+            entries = [
+                e
+                for e in entries
+                if isinstance((ts := e.get("ts")), (int, float)) and float(ts) > after_ts
+            ]
         return entries
 
     def append_event(self, event: Event) -> None:

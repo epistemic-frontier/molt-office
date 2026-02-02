@@ -150,10 +150,6 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         )
         return _event_payload(event, diag)
 
-    @app.get("/health")
-    def health():
-        return {"ok": True}
-
     @app.post("/objects/create")
     def object_create(body: ObjectCreateRequest):
         event, diag = world.object_create(
