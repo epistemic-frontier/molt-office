@@ -5,8 +5,8 @@ from typing import Any, Dict, Optional
 import os
 
 from fastapi import FastAPI, HTTPException, Request
+import time
 from fastapi.responses import JSONResponse, StreamingResponse
-import json
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 
@@ -126,20 +126,8 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         return _event_payload(event, diag)
 
     @app.get("/boards/{room_id}/read")
-    def board_read(
-        room_id: str,
-        actor: str,
-        limit: int = 20,
-        offset: int = 0,
-        entry_actor: Optional[str] = None,
-    ):
-        event, diag = world.board_read(
-            actor,
-            room_id,
-            limit=limit,
-            offset=offset,
-            entry_actor=entry_actor,
-        )
+    def board_read(room_id: str, actor: str, limit: int = 20):
+        event, diag = world.board_read(actor, room_id, limit=limit)
         return _event_payload(event, diag)
 
     @app.post("/objects/create")
@@ -208,8 +196,25 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
 
     @app.get("/health")
     def health():
-        redis_ok = backend.ping() if isinstance(backend, RedisBackend) else True
-        return {"ok": True, "redis": redis_ok}
+        status = "ok"
+        backend_type = type(backend).__name__
+        redis_ok = None
+        redis_latency_ms = None
+        if isinstance(backend, RedisBackend):
+            try:
+                start = time.time()
+                backend.client.ping()
+                redis_latency_ms = int((time.time() - start) * 1000)
+                redis_ok = True
+            except Exception:
+                redis_ok = False
+                status = "degraded"
+        return {
+            "status": status,
+            "backend": backend_type,
+            "redis_ok": redis_ok,
+            "redis_latency_ms": redis_latency_ms,
+        }
 
     @app.get("/events")
     def events_stream(last_id: str = "0-0", block_ms: int = 0):
@@ -231,11 +236,9 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
                     for entry in entries:
                         current = entry["id"]
                         payload = jsonable_encoder(entry)
-                        # Emit JSON string for SSE data field
                         yield f"id: {current}\n"
-                        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                        yield f"data: {payload}\n\n"
                 else:
-                    # Comment heartbeat to keep connections alive
                     yield ": keep-alive\n\n"
 
         return StreamingResponse(generator(), media_type="text/event-stream")
