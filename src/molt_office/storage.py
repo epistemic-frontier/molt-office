@@ -42,6 +42,9 @@ class StorageBackend:
     def append_board(self, room_id: str, entry: Dict[str, Any]) -> None:
         raise NotImplementedError
 
+    def read_board(self, room_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
     def append_event(self, event: Event) -> None:
         raise NotImplementedError
 
@@ -138,6 +141,10 @@ class InMemoryBackend(StorageBackend):
 
     def append_board(self, room_id: str, entry: Dict[str, Any]) -> None:
         self.state.boards.setdefault(room_id, []).append(entry)
+
+    def read_board(self, room_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        entries = self.state.boards.get(room_id, [])
+        return entries[-limit:]
 
     def append_event(self, event: Event) -> None:
         self.state.events.append(event)
@@ -348,6 +355,11 @@ class RedisBackend(StorageBackend):
 
     def append_board(self, room_id: str, entry: Dict[str, Any]) -> None:
         self.client.rpush(self._k(f"board:{room_id}"), json.dumps(entry))
+
+    def read_board(self, room_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        start = -limit
+        items = self.client.lrange(self._k(f"board:{room_id}"), start, -1)
+        return [json.loads(item) for item in items]
 
     def append_event(self, event: Event) -> None:
         self.client.xadd(self._k("events"), _event_fields(event))

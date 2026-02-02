@@ -71,7 +71,9 @@ def _event_payload(event, diag) -> Dict[str, Any]:
 
 
 def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
-    backend = backend or InMemoryBackend()
+    if backend is None:
+        redis_url = os.getenv("MOLT_REDIS_URL")
+        backend = RedisBackend(redis_url) if redis_url else InMemoryBackend()
     world = World(backend=backend)
 
     app = FastAPI(title="molt-office", version="0.0.1")
@@ -119,6 +121,11 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
     @app.post("/boards/{room_id}/write")
     def board_write(room_id: str, body: BoardWriteRequest):
         event, diag = world.board_write(body.actor, room_id, body.message)
+        return _event_payload(event, diag)
+
+    @app.get("/boards/{room_id}/read")
+    def board_read(room_id: str, actor: str, limit: int = 20):
+        event, diag = world.board_read(actor, room_id, limit=limit)
         return _event_payload(event, diag)
 
     @app.post("/objects/create")

@@ -193,6 +193,17 @@ class World:
         self.backend.append_event(event)
         return event, None
 
+    def board_read(self, actor: str, room_id: str, limit: int = 20) -> tuple[Event, Optional[DiagEvent]]:
+        room = self.backend.get_room(room_id)
+        if not room:
+            err = WorldError("E_BAD_ARG", "Unknown room", {"room_id": room_id})
+            return self._fail(actor, "board.read", room_id, err)
+        entries = self.backend.read_board(room_id, limit=limit)
+        self._record_success(actor)
+        event = self._emit_event(actor, "board.read", room_id, True, {"entries": entries}, None)
+        self.backend.append_event(event)
+        return event, None
+
     def object_create(
         self,
         actor: str,
