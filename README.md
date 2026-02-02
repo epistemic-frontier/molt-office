@@ -16,6 +16,22 @@ This repo is intentionally minimal right now. The first implementation is an in-
 Single-instance Redis is used for world state + event stream (Redis Streams).
 Set `MOLT_REDIS_URL=redis://localhost:6379/0` for integration tests.
 
+### API (FastAPI)
+Run a minimal HTTP API server:
+```
+MOLT_REDIS_URL=redis://localhost:6379/0 \
+  .venv/bin/uvicorn molt_office.api:create_app --factory --reload
+```
+Endpoints:
+- `GET /rooms?actor=ec`
+- `POST /rooms/{room_id}/enter`
+- `POST /rooms/leave`
+- `GET /rooms/whereami?actor=ec`
+- `POST /rooms/{room_id}/knock`
+- `POST /rooms/admit`
+- `POST /boards/{room_id}/write`
+- `GET /events?last_id=0-0&block_ms=0` (Redis only)
+
 ## Principles
 1. Shared facts, local minds
 2. World semantics, not just messages

@@ -48,6 +48,9 @@ class StorageBackend:
     def append_diag(self, actor: str, diag: DiagEvent) -> None:
         raise NotImplementedError
 
+    def read_events(self, last_id: str, block_ms: int = 0) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
     def incr_failure(self, actor: str) -> int:
         raise NotImplementedError
 
@@ -106,6 +109,11 @@ class InMemoryBackend(StorageBackend):
 
     def append_diag(self, actor: str, diag: DiagEvent) -> None:
         self.state.diag.append((actor, diag))
+
+    def read_events(self, last_id: str, block_ms: int = 0) -> List[Dict[str, Any]]:
+        _ = last_id
+        _ = block_ms
+        return []
 
     def incr_failure(self, actor: str) -> int:
         self.state.consecutive_failures[actor] = self.state.consecutive_failures.get(actor, 0) + 1
@@ -229,6 +237,15 @@ class RedisBackend(StorageBackend):
     def append_diag(self, actor: str, diag: DiagEvent) -> None:
         payload = {"actor": actor, "cmd": diag.cmd, "details": json.dumps(diag.details)}
         self.client.xadd(self._k("diag"), payload)
+
+    def read_events(self, last_id: str, block_ms: int = 0) -> List[Dict[str, Any]]:
+        stream_key = self._k("events")
+        result = self.client.xread({stream_key: last_id}, block=block_ms)
+        entries: List[Dict[str, Any]] = []
+        for _, items in result:
+            for entry_id, fields in items:
+                entries.append({"id": entry_id, "fields": fields})
+        return entries
 
     def incr_failure(self, actor: str) -> int:
         return int(self.client.hincrby(self._k("failures"), actor, 1))
