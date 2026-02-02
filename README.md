@@ -33,7 +33,7 @@ Endpoints:
 - `POST /rooms/{room_id}/knock`
 - `POST /rooms/admit`
 - `POST /boards/{room_id}/write`
-- `GET /boards/{room_id}/read?actor=ec&limit=20&offset=0&entry_actor=ec`
+- `GET /boards/{room_id}/read?actor=ec&limit=20&offset=0&by_actor=ec`
 - `POST /objects/create`
 - `GET /objects/{object_id}?actor=ec`
 - `POST /objects/{object_id}/write`
@@ -42,7 +42,6 @@ Endpoints:
 - `GET /objects?actor=ec&holder=ec`
 - `GET /objects/search?actor=ec&q=lemma&tags=cat:logic,desc:lemma&tag_mode=all&offset=0&limit=50`
 - `GET /objects/{object_id}/history?actor=ec&offset=0&limit=50`
-- `GET /health`
 - `GET /events?last_id=0-0&block_ms=0` (Redis only)
 - `GET /events/sse?last_id=0-0&heartbeat=15000` (Redis only)
 

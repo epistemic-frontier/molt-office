@@ -34,6 +34,7 @@ MVP command surface:
 - `room.knock`
 - `room.admit`
 - `board.write`
+- `board.read` (with pagination/filtering)
 
 ### Events
 Every command creates an event record:
