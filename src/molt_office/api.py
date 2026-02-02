@@ -7,6 +7,7 @@ import os
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 import json
+import time
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 
@@ -209,6 +210,51 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
     def object_history(actor: str, object_id: str, offset: int = 0, limit: int = 50):
         event, diag = world.object_history(actor, object_id, offset=offset, limit=limit)
         return _event_payload(event, diag)
+
+    started_at = time.time()
+
+    @app.get("/health")
+    def health():
+        status = "ok"
+        backend_type = type(backend).__name__
+        redis_ok = None
+        redis_latency_ms = None
+        if isinstance(backend, RedisBackend):
+            try:
+                start = time.time()
+                backend.client.ping()
+                redis_latency_ms = int((time.time() - start) * 1000)
+                redis_ok = True
+            except Exception:
+                redis_ok = False
+                status = "degraded"
+        return {
+            "status": status,
+            "backend": backend_type,
+            "redis_ok": redis_ok,
+            "redis_latency_ms": redis_latency_ms,
+        }
+
+    @app.get("/metrics")
+    def metrics():
+        base = {
+            "backend": type(backend).__name__,
+            "uptime_s": int(time.time() - started_at),
+            "requests": None,
+        }
+        if not isinstance(backend, RedisBackend):
+            return {
+                **base,
+                "events": None,
+                "event_lag_ms": None,
+                "redis_ping_ms": None,
+            }
+        return {
+            **base,
+            "events": backend.event_length(),
+            "event_lag_ms": backend.event_lag_ms(),
+            "redis_ping_ms": backend.redis_ping_ms(),
+        }
 
     @app.get("/events")
     def events_stream(last_id: str = "0-0", block_ms: int = 0):
