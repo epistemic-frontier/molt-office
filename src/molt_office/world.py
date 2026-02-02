@@ -265,6 +265,20 @@ class World:
         self.backend.append_event(event)
         return event, None
 
+    def object_search(
+        self,
+        actor: str,
+        query: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        holder: Optional[str] = None,
+    ) -> tuple[Event, Optional[DiagEvent]]:
+        objs = self.backend.search_objects(query=query, tags=tags, holder=holder)
+        data = {"objects": [o.__dict__ for o in objs]}
+        self._record_success(actor)
+        event = self._emit_event(actor, "obj.search", None, True, data, None)
+        self.backend.append_event(event)
+        return event, None
+
     def _fail(self, actor: str, cmd: str, room_id: Optional[str], err: WorldError) -> tuple[Event, DiagEvent]:
         self._record_failure(actor)
         hint = self._maybe_hint(actor, err.code)

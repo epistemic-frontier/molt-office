@@ -136,6 +136,12 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         event, diag = world.object_list(actor, holder)
         return _event_payload(event, diag)
 
+    @app.get("/objects/search")
+    def object_search(actor: str, q: Optional[str] = None, tags: Optional[str] = None, holder: Optional[str] = None):
+        tag_list = tags.split(",") if tags else None
+        event, diag = world.object_search(actor, query=q, tags=tag_list, holder=holder)
+        return _event_payload(event, diag)
+
     @app.get("/events")
     def events_stream(last_id: str = "0-0", block_ms: int = 0):
         if not isinstance(backend, RedisBackend):

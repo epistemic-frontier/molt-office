@@ -60,6 +60,14 @@ class StorageBackend:
     def list_objects(self, holder: Optional[str] = None) -> List[NoteObject]:
         raise NotImplementedError
 
+    def search_objects(
+        self,
+        query: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        holder: Optional[str] = None,
+    ) -> List[NoteObject]:
+        raise NotImplementedError
+
     def update_object_content(self, object_id: str, content: str) -> Optional[NoteObject]:
         raise NotImplementedError
 
@@ -154,6 +162,25 @@ class InMemoryBackend(StorageBackend):
             return None
         obj.tags = tags
         return obj
+
+    def search_objects(
+        self,
+        query: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        holder: Optional[str] = None,
+    ) -> List[NoteObject]:
+        objects = self.list_objects(holder=holder)
+        results: List[NoteObject] = []
+        query_l = query.lower() if query else None
+        for obj in objects:
+            if tags and not set(tags).issubset(set(obj.tags)):
+                continue
+            if query_l:
+                hay = f"{obj.title}\n{obj.summary}\n{obj.content}".lower()
+                if query_l not in hay:
+                    continue
+            results.append(obj)
+        return results
 
     def incr_failure(self, actor: str) -> int:
         self.state.consecutive_failures[actor] = self.state.consecutive_failures.get(actor, 0) + 1
@@ -341,6 +368,25 @@ class RedisBackend(StorageBackend):
         obj.tags = tags
         self.put_object(obj)
         return obj
+
+    def search_objects(
+        self,
+        query: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        holder: Optional[str] = None,
+    ) -> List[NoteObject]:
+        objects = self.list_objects(holder=holder)
+        results: List[NoteObject] = []
+        query_l = query.lower() if query else None
+        for obj in objects:
+            if tags and not set(tags).issubset(set(obj.tags)):
+                continue
+            if query_l:
+                hay = f"{obj.title}\n{obj.summary}\n{obj.content}".lower()
+                if query_l not in hay:
+                    continue
+            results.append(obj)
+        return results
 
     def incr_failure(self, actor: str) -> int:
         return int(self.client.hincrby(self._k("failures"), actor, 1))

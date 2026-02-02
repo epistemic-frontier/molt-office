@@ -35,6 +35,7 @@ Endpoints:
 - `POST /objects/{object_id}/write`
 - `POST /objects/{object_id}/tags`
 - `GET /objects?actor=ec&holder=ec`
+- `GET /objects/search?actor=ec&q=lemma&tags=cat:logic,desc:lemma`
 - `GET /events?last_id=0-0&block_ms=0` (Redis only)
 
 ## Principles
