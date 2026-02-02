@@ -202,9 +202,25 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         return {"stream": entries}
 
     @app.get("/events/sse")
-    def events_sse(last_id: str = "0-0", heartbeat: int = 15000):
+    def events_sse(
+        last_id: str = "0-0",
+        heartbeat: int = 15000,
+        actor: Optional[str] = None,
+        room_id: Optional[str] = None,
+        cmd: Optional[str] = None,
+    ):
         if not isinstance(backend, RedisBackend):
             raise HTTPException(status_code=400, detail="Redis backend required for event stream")
+
+        def match_filter(payload: Dict[str, Any]) -> bool:
+            fields = payload.get("fields", {})
+            if actor and fields.get("actor") != actor:
+                return False
+            if room_id and fields.get("room_id") != room_id:
+                return False
+            if cmd and fields.get("cmd") != cmd:
+                return False
+            return True
 
         def generator():
             current = last_id
@@ -214,6 +230,8 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
                     for entry in entries:
                         current = entry["id"]
                         payload = jsonable_encoder(entry)
+                        if not match_filter(payload):
+                            continue
                         # Emit JSON string for SSE data field
                         yield f"id: {current}\n"
                         yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
