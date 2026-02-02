@@ -60,6 +60,9 @@ class StorageBackend:
     def read_events(self, last_id: str, block_ms: int = 0) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
+    def ping(self) -> bool:
+        raise NotImplementedError
+
     def put_object(self, obj: NoteObject) -> None:
         raise NotImplementedError
 
@@ -176,6 +179,9 @@ class InMemoryBackend(StorageBackend):
         _ = last_id
         _ = block_ms
         return []
+
+    def ping(self) -> bool:
+        return True
 
     def put_object(self, obj: NoteObject) -> None:
         self.state.objects[obj.object_id] = obj
@@ -412,6 +418,9 @@ class RedisBackend(StorageBackend):
             for entry_id, fields in items:
                 entries.append({"id": entry_id, "fields": fields})
         return entries
+
+    def ping(self) -> bool:
+        return bool(self.client.ping())
 
     def put_object(self, obj: NoteObject) -> None:
         self.client.hset(

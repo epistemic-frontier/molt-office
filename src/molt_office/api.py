@@ -205,6 +205,11 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         event, diag = world.object_history(actor, object_id, offset=offset, limit=limit)
         return _event_payload(event, diag)
 
+    @app.get("/health")
+    def health():
+        redis_ok = backend.ping() if isinstance(backend, RedisBackend) else True
+        return {"ok": True, "redis": redis_ok}
+
     @app.get("/events")
     def events_stream(last_id: str = "0-0", block_ms: int = 0):
         if not isinstance(backend, RedisBackend):
