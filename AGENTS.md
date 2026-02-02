@@ -1,6 +1,21 @@
 # AGENTS.md
 
-This document is for automation agents / AI assistants / contributors working in this repository. The goal is to keep changes verifiable and maintainable, and to continuously apply strong Python engineering practices.
+This document defines the **authoritative engineering and world-semantics contract** for this repository.
+
+All contributors — human developers, automation scripts, and AI agents — **must** follow the rules described here.  
+Any change that violates this contract is considered invalid, regardless of intent.
+
+This repository is built around **world semantics** rather than message passing:
+facts are shared through a deterministic world model; agents have local reasoning but no private authority over global state.
+
+The goals of this contract are:
+
+- **Verifiability**: every change must be auditable, reproducible, and testable.
+- **Determinism**: identical inputs and world state produce identical outcomes.
+- **Stability**: public interfaces, error codes, and world rules evolve carefully and compatibly.
+- **Minimalism**: prefer small, explicit interfaces over implicit behavior or hidden state.
+
+If you are unsure whether a change complies with this contract, **do not merge it**.
 
 ## Project At A Glance
 

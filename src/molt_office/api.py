@@ -270,6 +270,7 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
     def events_sse(
         last_id: str = "0-0",
         heartbeat: int = 15000,
+        follow: bool = True,
         actor: Optional[str] = None,
         room_id: Optional[str] = None,
         cmd: Optional[str] = None,
@@ -290,7 +291,7 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         def generator():
             current = last_id
             while True:
-                entries = backend.read_events(last_id=current, block_ms=heartbeat)
+                entries = backend.read_events(last_id=current, block_ms=heartbeat if follow else 0)
                 if entries:
                     for entry in entries:
                         current = entry["id"]
@@ -301,6 +302,8 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
                         yield f"id: {current}\n"
                         yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
                 else:
+                    if not follow:
+                        return
                     # Comment heartbeat to keep connections alive
                     yield ": keep-alive\n\n"
 

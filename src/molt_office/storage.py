@@ -440,7 +440,10 @@ class RedisBackend(StorageBackend):
 
     def read_events(self, last_id: str, block_ms: int = 0) -> List[Dict[str, Any]]:
         stream_key = self._k("events")
-        result = self.client.xread({stream_key: last_id}, block=block_ms)
+        if block_ms > 0:
+            result = self.client.xread({stream_key: last_id}, block=block_ms)
+        else:
+            result = self.client.xread({stream_key: last_id})
         entries: List[Dict[str, Any]] = []
         for _, items in result:
             for entry_id, fields in items:

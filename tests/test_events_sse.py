@@ -33,53 +33,31 @@ def test_events_sse_filters_actor_room_cmd():
     world.room_enter("bob", "coffee:public")
     world.board_write("bob", "coffee:public", "hi")
 
-    with client.stream(
-        "GET",
+    resp = client.get(
         "/events/sse",
-        params={"actor": "alice", "last_id": "0-0", "heartbeat": 1},
-        timeout=2,
-    ) as resp:
-        assert resp.status_code == 200
-        payloads: list[dict] = []
-        for line in resp.iter_lines():
-            line_s = line.decode() if isinstance(line, (bytes, bytearray)) else line
-            if line_s.startswith("data: "):
-                payloads.append(json.loads(line_s[6:]))
-                if len(payloads) >= 2:
-                    break
-        assert payloads
-        assert all(p["fields"]["actor"] == "alice" for p in payloads)
+        params={"actor": "alice", "last_id": "0-0", "heartbeat": 1, "follow": False},
+    )
+    assert resp.status_code == 200
+    payloads: list[dict] = [
+        json.loads(line[6:]) for line in resp.text.splitlines() if line.startswith("data: ")
+    ]
+    assert payloads
+    assert all(p["fields"]["actor"] == "alice" for p in payloads)
 
-    with client.stream(
-        "GET",
+    resp = client.get(
         "/events/sse",
-        params={"room_id": "coffee:public", "last_id": "0-0", "heartbeat": 1},
-        timeout=2,
-    ) as resp:
-        assert resp.status_code == 200
-        payloads = []
-        for line in resp.iter_lines():
-            line_s = line.decode() if isinstance(line, (bytes, bytearray)) else line
-            if line_s.startswith("data: "):
-                payloads.append(json.loads(line_s[6:]))
-                if len(payloads) >= 1:
-                    break
-        assert payloads
-        assert all(p["fields"]["room_id"] == "coffee:public" for p in payloads)
+        params={"room_id": "coffee:public", "last_id": "0-0", "heartbeat": 1, "follow": False},
+    )
+    assert resp.status_code == 200
+    payloads = [json.loads(line[6:]) for line in resp.text.splitlines() if line.startswith("data: ")]
+    assert payloads
+    assert all(p["fields"]["room_id"] == "coffee:public" for p in payloads)
 
-    with client.stream(
-        "GET",
+    resp = client.get(
         "/events/sse",
-        params={"cmd": "board.write", "last_id": "0-0", "heartbeat": 1},
-        timeout=2,
-    ) as resp:
-        assert resp.status_code == 200
-        payloads = []
-        for line in resp.iter_lines():
-            line_s = line.decode() if isinstance(line, (bytes, bytearray)) else line
-            if line_s.startswith("data: "):
-                payloads.append(json.loads(line_s[6:]))
-                if len(payloads) >= 2:
-                    break
-        assert payloads
-        assert all(p["fields"]["cmd"] == "board.write" for p in payloads)
+        params={"cmd": "board.write", "last_id": "0-0", "heartbeat": 1, "follow": False},
+    )
+    assert resp.status_code == 200
+    payloads = [json.loads(line[6:]) for line in resp.text.splitlines() if line.startswith("data: ")]
+    assert payloads
+    assert all(p["fields"]["cmd"] == "board.write" for p in payloads)
