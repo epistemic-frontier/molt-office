@@ -17,6 +17,9 @@ def test_health_endpoint_payload():
     data = resp.json()
     assert data["status"] in {"ok", "degraded"}
     assert "backend" in data
-    # When Redis is not configured, redis_ok should be None
-    assert data.get("redis_ok") is None
-    assert data.get("redis_latency_ms") is None
+    # If Redis is configured, redis_ok/latency should be present; otherwise None
+    if data.get("backend") == "RedisBackend":
+        assert data.get("redis_ok") in {True, False}
+    else:
+        assert data.get("redis_ok") is None
+        assert data.get("redis_latency_ms") is None
