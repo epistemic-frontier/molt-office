@@ -200,6 +200,7 @@ class World:
         limit: int = 20,
         offset: int = 0,
         by_actor: Optional[str] = None,
+        entry_actor: Optional[str] = None,
         before_ts: Optional[float] = None,
         after_ts: Optional[float] = None,
     ) -> tuple[Event, Optional[DiagEvent]]:
@@ -207,6 +208,8 @@ class World:
         if not room:
             err = WorldError("E_BAD_ARG", "Unknown room", {"room_id": room_id})
             return self._fail(actor, "board.read", room_id, err)
+        if entry_actor is not None:
+            by_actor = entry_actor
         entries = self.backend.read_board(
             room_id,
             limit=limit,

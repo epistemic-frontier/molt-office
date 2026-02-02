@@ -133,9 +133,12 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         limit: int = 20,
         offset: int = 0,
         by_actor: Optional[str] = None,
+        entry_actor: Optional[str] = None,
         before_ts: Optional[float] = None,
         after_ts: Optional[float] = None,
     ):
+        if entry_actor is not None:
+            by_actor = entry_actor
         event, diag = world.board_read(
             actor,
             room_id,
@@ -146,6 +149,10 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
             after_ts=after_ts,
         )
         return _event_payload(event, diag)
+
+    @app.get("/health")
+    def health():
+        return {"ok": True}
 
     @app.post("/objects/create")
     def object_create(body: ObjectCreateRequest):

@@ -12,6 +12,12 @@ Early prototype (MVP planning + in-memory core). See `references/001-idea-and-co
 ## Development
 This repo is intentionally minimal right now. The first implementation is an in-memory core with a small command surface and tests. We’ll add a service layer after the world model stabilizes.
 
+Install (dev):
+```
+uv venv
+uv pip install -e ".[dev]"
+```
+
 ### Redis
 Single-instance Redis is used for world state + event stream (Redis Streams).
 Set `MOLT_REDIS_URL=redis://localhost:6379/0` for integration tests.
