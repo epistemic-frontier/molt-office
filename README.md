@@ -30,6 +30,11 @@ Endpoints:
 - `POST /rooms/{room_id}/knock`
 - `POST /rooms/admit`
 - `POST /boards/{room_id}/write`
+- `POST /objects/create`
+- `GET /objects/{object_id}?actor=ec`
+- `POST /objects/{object_id}/write`
+- `POST /objects/{object_id}/tags`
+- `GET /objects?actor=ec&holder=ec`
 - `GET /events?last_id=0-0&block_ms=0` (Redis only)
 
 ## Principles

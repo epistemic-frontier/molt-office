@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional
 import redis
 
 from .events import Event, DiagEvent
-from .models import Room, KnockRequest
+from .models import Room, KnockRequest, NoteObject
 from .world_state import WorldState
 
 
@@ -49,6 +49,21 @@ class StorageBackend:
         raise NotImplementedError
 
     def read_events(self, last_id: str, block_ms: int = 0) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def put_object(self, obj: NoteObject) -> None:
+        raise NotImplementedError
+
+    def get_object(self, object_id: str) -> Optional[NoteObject]:
+        raise NotImplementedError
+
+    def list_objects(self, holder: Optional[str] = None) -> List[NoteObject]:
+        raise NotImplementedError
+
+    def update_object_content(self, object_id: str, content: str) -> Optional[NoteObject]:
+        raise NotImplementedError
+
+    def set_object_tags(self, object_id: str, tags: List[str]) -> Optional[NoteObject]:
         raise NotImplementedError
 
     def incr_failure(self, actor: str) -> int:
@@ -114,6 +129,31 @@ class InMemoryBackend(StorageBackend):
         _ = last_id
         _ = block_ms
         return []
+
+    def put_object(self, obj: NoteObject) -> None:
+        self.state.objects[obj.object_id] = obj
+
+    def get_object(self, object_id: str) -> Optional[NoteObject]:
+        return self.state.objects.get(object_id)
+
+    def list_objects(self, holder: Optional[str] = None) -> List[NoteObject]:
+        if holder is None:
+            return list(self.state.objects.values())
+        return [obj for obj in self.state.objects.values() if obj.holder == holder]
+
+    def update_object_content(self, object_id: str, content: str) -> Optional[NoteObject]:
+        obj = self.state.objects.get(object_id)
+        if not obj:
+            return None
+        obj.content = content
+        return obj
+
+    def set_object_tags(self, object_id: str, tags: List[str]) -> Optional[NoteObject]:
+        obj = self.state.objects.get(object_id)
+        if not obj:
+            return None
+        obj.tags = tags
+        return obj
 
     def incr_failure(self, actor: str) -> int:
         self.state.consecutive_failures[actor] = self.state.consecutive_failures.get(actor, 0) + 1
@@ -246,6 +286,61 @@ class RedisBackend(StorageBackend):
             for entry_id, fields in items:
                 entries.append({"id": entry_id, "fields": fields})
         return entries
+
+    def put_object(self, obj: NoteObject) -> None:
+        self.client.hset(
+            self._k(f"obj:{obj.object_id}"),
+            mapping={
+                "object_id": obj.object_id,
+                "title": obj.title,
+                "summary": obj.summary,
+                "content": obj.content,
+                "holder": obj.holder,
+                "tags": json.dumps(obj.tags),
+            },
+        )
+        self.client.rpush(self._k("objects"), obj.object_id)
+
+    def get_object(self, object_id: str) -> Optional[NoteObject]:
+        data = self.client.hgetall(self._k(f"obj:{object_id}"))
+        if not data:
+            return None
+        return NoteObject(
+            object_id=data["object_id"],
+            title=data["title"],
+            summary=data["summary"],
+            content=data.get("content", ""),
+            holder=data["holder"],
+            tags=json.loads(data.get("tags") or "[]"),
+        )
+
+    def list_objects(self, holder: Optional[str] = None) -> List[NoteObject]:
+        ids = self.client.lrange(self._k("objects"), 0, -1)
+        objs: List[NoteObject] = []
+        for object_id in ids:
+            obj = self.get_object(object_id)
+            if not obj:
+                continue
+            if holder and obj.holder != holder:
+                continue
+            objs.append(obj)
+        return objs
+
+    def update_object_content(self, object_id: str, content: str) -> Optional[NoteObject]:
+        obj = self.get_object(object_id)
+        if not obj:
+            return None
+        obj.content = content
+        self.put_object(obj)
+        return obj
+
+    def set_object_tags(self, object_id: str, tags: List[str]) -> Optional[NoteObject]:
+        obj = self.get_object(object_id)
+        if not obj:
+            return None
+        obj.tags = tags
+        self.put_object(obj)
+        return obj
 
     def incr_failure(self, actor: str) -> int:
         return int(self.client.hincrby(self._k("failures"), actor, 1))

@@ -37,6 +37,25 @@ class BoardWriteRequest(BaseModel):
     message: str
 
 
+class ObjectCreateRequest(BaseModel):
+    actor: str
+    object_id: str
+    title: str
+    summary: str
+    content: str = ""
+    tags: Optional[list[str]] = None
+
+
+class ObjectWriteRequest(BaseModel):
+    actor: str
+    content: str
+
+
+class ObjectTagsRequest(BaseModel):
+    actor: str
+    tags: list[str]
+
+
 def _event_payload(event, diag) -> Dict[str, Any]:
     payload = asdict(event)
     if diag:
@@ -83,6 +102,38 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
     @app.post("/boards/{room_id}/write")
     def board_write(room_id: str, body: BoardWriteRequest):
         event, diag = world.board_write(body.actor, room_id, body.message)
+        return _event_payload(event, diag)
+
+    @app.post("/objects/create")
+    def object_create(body: ObjectCreateRequest):
+        event, diag = world.object_create(
+            actor=body.actor,
+            object_id=body.object_id,
+            title=body.title,
+            summary=body.summary,
+            content=body.content,
+            tags=body.tags,
+        )
+        return _event_payload(event, diag)
+
+    @app.get("/objects/{object_id}")
+    def object_read(object_id: str, actor: str):
+        event, diag = world.object_read(actor, object_id)
+        return _event_payload(event, diag)
+
+    @app.post("/objects/{object_id}/write")
+    def object_write(object_id: str, body: ObjectWriteRequest):
+        event, diag = world.object_write(body.actor, object_id, body.content)
+        return _event_payload(event, diag)
+
+    @app.post("/objects/{object_id}/tags")
+    def object_tags(object_id: str, body: ObjectTagsRequest):
+        event, diag = world.object_tags(body.actor, object_id, body.tags)
+        return _event_payload(event, diag)
+
+    @app.get("/objects")
+    def object_list(actor: str, holder: Optional[str] = None):
+        event, diag = world.object_list(actor, holder)
         return _event_payload(event, diag)
 
     @app.get("/events")

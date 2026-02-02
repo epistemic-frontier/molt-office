@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from .errors import WorldError
 from .events import Event, DiagEvent, new_action_id, now_ts
-from .models import Room, KnockRequest
+from .models import Room, KnockRequest, NoteObject
 from .storage import InMemoryBackend, StorageBackend
 
 
@@ -190,6 +190,78 @@ class World:
         self.backend.append_board(room_id, entry)
         self._record_success(actor)
         event = self._emit_event(actor, "board.write", room_id, True, {"entry": entry}, None)
+        self.backend.append_event(event)
+        return event, None
+
+    def object_create(
+        self,
+        actor: str,
+        object_id: str,
+        title: str,
+        summary: str,
+        content: str = "",
+        tags: Optional[List[str]] = None,
+    ) -> tuple[Event, Optional[DiagEvent]]:
+        if self.backend.get_object(object_id):
+            err = WorldError("E_CONFLICT", "Object already exists", {"object_id": object_id})
+            return self._fail(actor, "obj.create", None, err)
+        obj = NoteObject(
+            object_id=object_id,
+            title=title,
+            summary=summary,
+            content=content,
+            holder=actor,
+            tags=tags or [],
+        )
+        self.backend.put_object(obj)
+        self._record_success(actor)
+        event = self._emit_event(actor, "obj.create", None, True, {"object_id": object_id}, None)
+        self.backend.append_event(event)
+        return event, None
+
+    def object_read(self, actor: str, object_id: str) -> tuple[Event, Optional[DiagEvent]]:
+        obj = self.backend.get_object(object_id)
+        if not obj:
+            err = WorldError("E_BAD_ARG", "Unknown object", {"object_id": object_id})
+            return self._fail(actor, "obj.read", None, err)
+        self._record_success(actor)
+        event = self._emit_event(actor, "obj.read", None, True, {"object": obj.__dict__}, None)
+        self.backend.append_event(event)
+        return event, None
+
+    def object_write(self, actor: str, object_id: str, content: str) -> tuple[Event, Optional[DiagEvent]]:
+        obj = self.backend.get_object(object_id)
+        if not obj:
+            err = WorldError("E_BAD_ARG", "Unknown object", {"object_id": object_id})
+            return self._fail(actor, "obj.write", None, err)
+        if obj.holder != actor:
+            err = WorldError("E_FORBIDDEN", "Only holder can write", {"object_id": object_id})
+            return self._fail(actor, "obj.write", None, err)
+        obj = self.backend.update_object_content(object_id, content)
+        self._record_success(actor)
+        event = self._emit_event(actor, "obj.write", None, True, {"object_id": object_id}, None)
+        self.backend.append_event(event)
+        return event, None
+
+    def object_tags(self, actor: str, object_id: str, tags: List[str]) -> tuple[Event, Optional[DiagEvent]]:
+        obj = self.backend.get_object(object_id)
+        if not obj:
+            err = WorldError("E_BAD_ARG", "Unknown object", {"object_id": object_id})
+            return self._fail(actor, "obj.tags", None, err)
+        if obj.holder != actor:
+            err = WorldError("E_FORBIDDEN", "Only holder can tag", {"object_id": object_id})
+            return self._fail(actor, "obj.tags", None, err)
+        self.backend.set_object_tags(object_id, tags)
+        self._record_success(actor)
+        event = self._emit_event(actor, "obj.tags", None, True, {"object_id": object_id}, None)
+        self.backend.append_event(event)
+        return event, None
+
+    def object_list(self, actor: str, holder: Optional[str] = None) -> tuple[Event, Optional[DiagEvent]]:
+        objs = self.backend.list_objects(holder=holder)
+        data = {"objects": [o.__dict__ for o in objs]}
+        self._record_success(actor)
+        event = self._emit_event(actor, "obj.list", None, True, data, None)
         self.backend.append_event(event)
         return event, None
 
