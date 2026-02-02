@@ -42,7 +42,13 @@ class StorageBackend:
     def append_board(self, room_id: str, entry: Dict[str, Any]) -> None:
         raise NotImplementedError
 
-    def read_board(self, room_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def read_board(
+        self,
+        room_id: str,
+        limit: int = 20,
+        offset: int = 0,
+        actor: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
     def append_event(self, event: Event) -> None:
@@ -142,9 +148,23 @@ class InMemoryBackend(StorageBackend):
     def append_board(self, room_id: str, entry: Dict[str, Any]) -> None:
         self.state.boards.setdefault(room_id, []).append(entry)
 
-    def read_board(self, room_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def read_board(
+        self,
+        room_id: str,
+        limit: int = 20,
+        offset: int = 0,
+        actor: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         entries = self.state.boards.get(room_id, [])
-        return entries[-limit:]
+        if actor:
+            entries = [entry for entry in entries if entry.get("actor") == actor]
+        if limit <= 0:
+            return []
+        if offset < 0:
+            offset = 0
+        if offset == 0:
+            return entries[-limit:]
+        return entries[offset : offset + limit]
 
     def append_event(self, event: Event) -> None:
         self.state.events.append(event)
@@ -356,10 +376,26 @@ class RedisBackend(StorageBackend):
     def append_board(self, room_id: str, entry: Dict[str, Any]) -> None:
         self.client.rpush(self._k(f"board:{room_id}"), json.dumps(entry))
 
-    def read_board(self, room_id: str, limit: int = 20) -> List[Dict[str, Any]]:
-        start = -limit
-        items = self.client.lrange(self._k(f"board:{room_id}"), start, -1)
-        return [json.loads(item) for item in items]
+    def read_board(
+        self,
+        room_id: str,
+        limit: int = 20,
+        offset: int = 0,
+        actor: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        if limit <= 0:
+            return []
+        if offset == 0:
+            start = -limit
+            end = -1
+        else:
+            start = offset
+            end = offset + limit - 1
+        items = self.client.lrange(self._k(f"board:{room_id}"), start, end)
+        entries = [json.loads(item) for item in items]
+        if actor:
+            entries = [entry for entry in entries if entry.get("actor") == actor]
+        return entries
 
     def append_event(self, event: Event) -> None:
         self.client.xadd(self._k("events"), _event_fields(event))

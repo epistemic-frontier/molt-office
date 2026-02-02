@@ -33,7 +33,7 @@ Endpoints:
 - `POST /rooms/{room_id}/knock`
 - `POST /rooms/admit`
 - `POST /boards/{room_id}/write`
-- `GET /boards/{room_id}/read?actor=ec&limit=20`
+- `GET /boards/{room_id}/read?actor=ec&limit=20&offset=0&entry_actor=ec`
 - `POST /objects/create`
 - `GET /objects/{object_id}?actor=ec`
 - `POST /objects/{object_id}/write`

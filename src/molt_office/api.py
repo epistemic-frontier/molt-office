@@ -125,8 +125,20 @@ def create_app(backend: Optional[StorageBackend] = None) -> FastAPI:
         return _event_payload(event, diag)
 
     @app.get("/boards/{room_id}/read")
-    def board_read(room_id: str, actor: str, limit: int = 20):
-        event, diag = world.board_read(actor, room_id, limit=limit)
+    def board_read(
+        room_id: str,
+        actor: str,
+        limit: int = 20,
+        offset: int = 0,
+        entry_actor: Optional[str] = None,
+    ):
+        event, diag = world.board_read(
+            actor,
+            room_id,
+            limit=limit,
+            offset=offset,
+            entry_actor=entry_actor,
+        )
         return _event_payload(event, diag)
 
     @app.post("/objects/create")
