@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from molt_office.api import create_app
-from molt_office.storage import RedisBackend
+from molt_office.storage import InMemoryBackend, RedisBackend
 
 
 def test_health_endpoint_exists():
@@ -11,7 +11,7 @@ def test_health_endpoint_exists():
 
 
 def test_health_endpoint_payload_inmemory():
-    app = create_app()
+    app = create_app(backend=InMemoryBackend())
     client = TestClient(app)
     resp = client.get("/health")
     assert resp.status_code == 200

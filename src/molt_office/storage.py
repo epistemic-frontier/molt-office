@@ -290,7 +290,11 @@ class InMemoryBackend(StorageBackend):
 
 class RedisBackend(StorageBackend):
     def __init__(self, url: str = "redis://localhost:6379/0", prefix: str = "molt") -> None:
-        self.client: Any = redis.Redis.from_url(url, decode_responses=True)
+        self.client: Any = redis.Redis.from_url(
+            url,
+            decode_responses=True,
+            socket_connect_timeout=2,
+        )
         self.prefix = prefix
 
     def _k(self, suffix: str) -> str:

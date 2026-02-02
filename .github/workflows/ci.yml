@@ -41,4 +41,4 @@ jobs:
         env:
           MOLT_REDIS_URL: redis://localhost:6379/0
         run: |
-          uv run pytest -q
+          uv run pytest -ra --durations=20
