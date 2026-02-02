@@ -62,6 +62,15 @@ class StorageBackend:
     def read_events(self, last_id: str, block_ms: int = 0) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
+    def redis_ping_ms(self) -> Optional[float]:
+        raise NotImplementedError
+
+    def event_lag_ms(self) -> Optional[int]:
+        raise NotImplementedError
+
+    def event_length(self) -> Optional[int]:
+        raise NotImplementedError
+
     def put_object(self, obj: NoteObject) -> None:
         raise NotImplementedError
 
@@ -185,6 +194,15 @@ class InMemoryBackend(StorageBackend):
         _ = last_id
         _ = block_ms
         return []
+
+    def redis_ping_ms(self) -> Optional[float]:
+        return None
+
+    def event_lag_ms(self) -> Optional[int]:
+        return None
+
+    def event_length(self) -> Optional[int]:
+        return None
 
     def put_object(self, obj: NoteObject) -> None:
         self.state.objects[obj.object_id] = obj
@@ -426,6 +444,32 @@ class RedisBackend(StorageBackend):
             for entry_id, fields in items:
                 entries.append({"id": entry_id, "fields": fields})
         return entries
+
+    def redis_ping_ms(self) -> Optional[float]:
+        try:
+            start = time.time()
+            self.client.ping()
+            return (time.time() - start) * 1000
+        except Exception:
+            return None
+
+    def event_length(self) -> Optional[int]:
+        try:
+            return int(self.client.xlen(self._k("events")))
+        except Exception:
+            return None
+
+    def event_lag_ms(self) -> Optional[int]:
+        try:
+            info = self.client.xinfo_stream(self._k("events"))
+            last_id = info.get("last-generated-id")
+            if not last_id:
+                return None
+            last_ms = int(str(last_id).split("-")[0])
+            now_ms = int(time.time() * 1000)
+            return max(0, now_ms - last_ms)
+        except Exception:
+            return None
 
     def put_object(self, obj: NoteObject) -> None:
         self.client.hset(
