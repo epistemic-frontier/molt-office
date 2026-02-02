@@ -51,3 +51,8 @@ Endpoints:
 2. World semantics, not just messages
 3. Deterministic, auditable coordination
 4. Minimal interface, extensible core
+
+## Contribution Policy
+- **CI must pass** before merging (tests + lint where applicable).
+- New features should be added **TDD-first** (tests before implementation).
+- Keep public repo safe: **no tokens, hostnames, or private URLs** in commits.
